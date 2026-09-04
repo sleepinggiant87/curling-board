@@ -1,0 +1,18 @@
+{
+  "name": "CurlDraw",
+  "short_name": "CurlDraw",
+  "description": "Curling strategy board - draw shots, track ends and setup.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
