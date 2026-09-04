@@ -146,7 +146,6 @@ var TEE_Y = 0;          // tee line y (px)
 var HOG_Y = 0, BACK_Y = 0;
 var OX = 0, OY = 0;     // letterbox offsets (canvas larger than drawn sheet)
 var ROCK_R = 1;         // rock radius in px
-var VIEW_W_FT = SHEET_WIDTH_FT;
 // view sized to the sheet content (back line above tee + hog below) plus small
 // margins; the tee is shifted per-orientation in computeLayout so the content
 // fills the canvas edge-to-edge whether flipped or not. Rocks park in the
@@ -166,6 +165,10 @@ var REMOVED_GAP_FT = PARK_GAP_FT;
 var REMOVED_Y_START_FT = 6.3;                    // one full slot below the staging band, clears the last staged rock
 var REMOVED_SPLIT_Y_FT = 4.9;                    // margin rock dragged below this y -> removed
 var REMOVED_EDGE_X_FT = REMOVED_X_FT + 0.9;      // outermost edge incl. removed box/labels
+
+// visible canvas width must fit the sheet PLUS both side columns where rocks park
+// and the REMOVED boxes live, so staged rocks are on-screen even on narrow phones
+var VIEW_W_FT = 2 * REMOVED_EDGE_X_FT;           // 2 * 9.2 = 18.4ft (sheet 15ft + margins)
 
 var state = {
   rocks: [],
