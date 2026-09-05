@@ -1,6 +1,6 @@
 'use strict';
 
-var CACHE = 'curldraw-v3';
+var CACHE = 'curldraw-v1';
 var ASSETS = [
   './',
   './index.html',
