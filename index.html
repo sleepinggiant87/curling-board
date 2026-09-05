@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>CurlDraw</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CurlDraw">
+<meta name="theme-color" content="#1a1a2e">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#1a1a2e;color:#eee;height:100vh;display:flex;flex-direction:column;padding:4px;user-select:none;overflow:hidden}
+.app{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0;width:100%;height:100%}
+.toolbar{display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;justify-content:flex-start;align-items:center}
+.toolbar button{padding:5px 12px;border:1px solid #444;border-radius:4px;background:#2a2a4a;color:#eee;cursor:pointer;font-size:19px;line-height:1.2;transition:all .15s}
+.toolbar button:hover{background:#3a3a6a;border-color:#666}
+.toolbar button.active{background:#5a5aaa;border-color:#888;box-shadow:0 0 6px rgba(100,100,255,.4)}
+.toolbar .sep{width:1px;background:#444;margin:0 4px}
+.markup-bar{display:none;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-start}
+.markup-bar.visible{display:flex}
+.markup-bar button{padding:3px 8px;border:1px solid #444;border-radius:4px;background:#2a2a4a;color:#eee;cursor:pointer;font-size:13px;transition:all .15s}
+.markup-bar button:hover{background:#3a3a6a}
+.markup-bar button.active{background:#5a5aaa;border-color:#888}
+.markup-bar input[type=color]{width:26px;height:26px;border:1px solid #444;border-radius:3px;cursor:pointer;background:transparent;padding:1px}
+.workspace{display:flex;flex:1 1 auto;min-height:0;min-width:0;gap:8px}
+.side-col{display:flex;flex-direction:column;gap:6px;flex:0 0 auto;width:184px;min-width:0;background:#eee;border-radius:8px;padding:6px;box-shadow:0 4px 20px rgba(0,0,0,.5);overflow-y:auto}
+.board-col{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0;gap:4px}
+.board-container{background:#eee;border-radius:8px;padding:6px;box-shadow:0 4px 20px rgba(0,0,0,.5);display:flex;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0;width:100%}
+.settings-bar{display:flex;flex-direction:column;gap:8px}
+.settings-bar .field{display:flex;align-items:center;gap:6px;font-size:13px;color:#333;justify-content:flex-start}
+.settings-bar .field label{font-weight:600;white-space:nowrap;width:58px;flex:0 0 auto}
+.settings-bar select{padding:3px 5px;border:1px solid #999;border-radius:3px;background:#fff;font-size:13px;color:#222;min-width:0}
+.rz-bar{display:flex;flex-direction:column;gap:6px;background:#f5f5f5;border:1px solid #ccc;border-radius:6px;padding:6px}
+.rz-bar h4{margin:0;font-size:12px;color:#333;font-weight:700}
+.rz-bar .field{display:flex;align-items:center;gap:6px;font-size:12px;color:#333;justify-content:flex-start}
+.rz-bar .field input{width:auto}
+.rz-bar .field input[type=range]{min-width:90px}
+.rz-bar .field label span{font-weight:600;color:#111;min-width:34px;text-align:right}
+#sheet{display:block;border:1px solid #999;border-radius:4px;flex:1 1 auto;min-height:0;min-width:0;width:100%;touch-action:none}
+.side-toggle{display:none;position:fixed;z-index:40;bottom:10px;left:10px;padding:8px 12px;border:1px solid #555;border-radius:6px;background:#2a2a4a;color:#eee;cursor:pointer;font-size:14px}
+.side-close{display:none;align-self:flex-end;margin-bottom:2px;padding:2px 8px;border:1px solid #bbb;border-radius:4px;background:#ddd;color:#333;cursor:pointer;font-size:14px;line-height:1.2}
+.side-backdrop{display:none;position:fixed;z-index:25;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45)}
+@media (max-width:520px){
+  .toolbar{flex-wrap:nowrap;gap:3px;justify-content:flex-start}
+  .toolbar button{padding:4px 8px;font-size:16px}
+  .toolbar .sep{margin:0 2px}
+  .side-col{display:none;position:fixed;z-index:30;top:0;left:0;width:min(280px, 100vw);height:100vh;box-shadow:0 0 20px rgba(0,0,0,.6);overflow-y:auto}
+  .side-col.visible{display:flex}
+  .side-toggle{display:block}
+  .side-col.visible .side-close{display:block}
+  .side-col.visible ~ .side-backdrop{display:block}
+  body.menu-open .side-toggle{left:min(280px, 100vw);transform:translateX(-100%);bottom:10px}
+}
+.app:fullscreen{width:100vw;height:100vh}
+.app:fullscreen .board-container{width:100vw;height:100vh}
+.app:fullscreen .side-col .field{color:#ccc}
+.app:fullscreen .side-col select{background:#333;color:#eee;border-color:#555}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="toolbar">
+<button id="btnUndo" title="Undo (Ctrl+Z)">&#8630;</button>
+<button id="btnRedo" title="Redo (Ctrl+Y)">&#8631;</button>
+<div class="sep"></div>
+<button id="btnClear" title="Clear Rocks">&#129529;</button>
+<button id="btnRandomize" title="Randomly place rocks">&#127922;</button>
+<button id="btnFlip" title="Flip Orientation">&#8645;</button>
+<div class="sep"></div>
+<button id="btnMarkup" title="Toggle Markup Mode">&#9998;</button>
+<button id="btnFullscreen" title="Toggle Fullscreen">&#9974;</button>
+<button id="btnSave" title="Save as PNG">&#128190;</button>
+<button id="btnSettings" title="Toggle Settings">&#9881;</button>
+</div>
+<div class="workspace">
+<div class="side-col" id="sideCol">
+<button class="side-close" id="btnSideClose" title="Close">&#10005;</button>
+<div class="settings-bar" id="settingsBar">
+<div class="field"><label>Score:</label><select id="infoScore"></select></div>
+<div class="field"><label>End:</label><select id="infoCurrentEnd"></select></div>
+<div class="field"><label>Next:</label><select id="infoShootColour"><option>Yellow</option><option>Red</option></select></div>
+<div class="field"><select id="infoShootPos"><option>Lead</option><option>Second</option><option>Third</option><option>Skip</option></select></div>
+<div class="field"><select id="infoShootNum"><option>1st rock</option><option>2nd rock</option></select></div>
+<div class="field"><label>Hammer:</label><select id="infoHammer"><option>Yellow</option><option selected>Red</option></select></div>
+<div class="field"><label>TotEnds:</label><select id="infoGameLength"><option>4</option><option>6</option><option selected>8</option><option>10</option><option>12</option></select></div>
+<div class="field"><label>Curl:</label><select id="infoCurl"><option value="">-</option><option>None</option><option>1ft</option><option>2ft</option><option>3ft</option><option selected>4ft</option><option>5ft</option><option>6ft</option><option>7ft</option><option>-ve</option></select></div>
+<div class="field"><label>Speed:</label><select id="infoSpeed"><option value="">-</option><option>12</option><option>12.5</option><option>13</option><option>13.5</option><option>14</option><option selected>14.5</option><option>15</option><option>15.5</option><option>16</option></select></div>
+</div>
+<div class="rz-bar" id="randomizeBar">
+<h4>Randomize</h4>
+<div class="field"><label><input type="checkbox" id="rzScore"> Score</label></div>
+<div class="field"><label><input type="checkbox" id="rzEnd"> End</label></div>
+<div class="field"><label><input type="checkbox" id="rzNext" checked> Next</label></div>
+<div class="field"><label><input type="checkbox" id="rzHammer" checked> Hammer</label></div>
+<div class="field"><label><input type="checkbox" id="rzTotEnds"> TotEnds</label></div>
+<div class="field"><label><input type="checkbox" id="rzCurl"> Curl</label></div>
+<div class="field"><label><input type="checkbox" id="rzSpeed"> Speed</label></div>
+<div class="field"><label><input type="checkbox" id="rzRocks" checked> Rocks</label></div>
+<div class="field"><label><input type="checkbox" id="rzFreeze"> Freeze</label></div>
+<div class="field"><label>Freeze: <input type="range" id="rzFreezeAmt" min="0" max="100" value="30"> <span id="rzFreezeAmtVal">30%</span></label></div>
+<div class="field"><label><input type="checkbox" id="rzGuard"> Guard</label></div>
+<div class="field"><label>Guard: <input type="range" id="rzGuardAmt" min="0" max="100" value="45"> <span id="rzGuardAmtVal">45%</span></label></div>
+</div>
+</div>
+<div class="board-col">
+<div class="markup-bar" id="markupBar">
+<button class="markup-tool active" data-tool="pen">&#9998; Pen</button>
+<button class="markup-tool" data-tool="line">&#9585; Line</button>
+<button class="markup-tool" data-tool="arrow">&#8594; Arrow</button>
+<button class="markup-tool" data-tool="circle">&#9675; Circle</button>
+<div class="sep" style="width:1px;background:#444;height:20px;margin:0 4px"></div>
+<input type="color" id="markupColor" value="#000000" title="Markup colour">
+<button id="btnMarkupUndo">&#8617; Undo</button>
+<button id="btnMarkupClear">&#10005; Clear</button>
+</div>
+<div class="board-container">
+<canvas id="sheet"></canvas>
+</div>
+
+</div>
+</div>
+</div>
+<button class="side-toggle" id="btnSideToggle" title="Toggle controls">&#9881;</button>
+<div class="side-backdrop" id="sideBackdrop"></div>
+
+<script>
+(function(){
+// ---- REAL-WORLD CURLING DIMENSIONS (feet, from WCF rules) ----
+var SHEET_WIDTH_FT = 15;                  // sheet width (sideline to sideline)
+var BACK_TO_TEE_FT  = 6;                  // back line to tee line
+var TEE_TO_HOG_FT   = 21;                 // tee line to hog line (inner edge)
+var HOUSE_RADII_FT  = [6, 4, 2, 0.5];     // 12, 8, 4 foot rings + button
+var ROCK_RADIUS_FT  = 11.5 / 24;          // 11.5in diameter -> ~0.479ft radius
+var HOG_W_FT        = 4 / 12;             // hog line width 4in
+var LINE_W_FT       = 0.5 / 12;           // thin lines 1/2in
+
+// ---- DYNAMIC LAYOUT (recomputed on resize/fullscreen) ----
+var S = 1;              // px per foot
+var CW = 0, CH = 0;     // canvas size in px
+var CX = 0;             // sheet centre x (px)
+var TEE_Y = 0;          // tee line y (px)
+var HOG_Y = 0, BACK_Y = 0;
+var OX = 0, OY = 0;     // letterbox offsets (canvas larger than drawn sheet)
+var ROCK_R = 1;         // rock radius in px
+// view sized to the sheet content (back line above tee + hog below) plus small
+// margins; the tee is shifted per-orientation in computeLayout so the content
+// fills the canvas edge-to-edge whether flipped or not. Rocks park in the
+// left/right margins, so no vertical staging band is reserved.
+var EDGE_M_FT = 0.75;
+var VIEW_H_FT = BACK_TO_TEE_FT + TEE_TO_HOG_FT + 2 * EDGE_M_FT; // 28.5ft view
+var SUMMARY_BAND_PX = 55;   // reserved band at the top of the canvas for the summary (2 lines, larger font)
+
+// rocks park in the left/right margins, clustered near the house end
+var PARK_X_FT = 8.3;          // x offset from centre (just outside the sideline)
+var PARK_SNAP_X = SHEET_WIDTH_FT / 2 + 0.4; // drop beyond this -> snap back to slot
+var PARK_GAP_FT = 1.4;        // vertical spacing between parked stones
+var PARK_Y_START_FT = -4.9;   // 8 stones: yf[i] = -4.9 + i*1.4  -> spans ±4.9
+// "removed from play" box stacks in the SAME column, below the staging rocks (one per team)
+var REMOVED_X_FT = PARK_X_FT;                    // same x as staging -> vertically aligned, narrower board
+var REMOVED_GAP_FT = PARK_GAP_FT;
+var REMOVED_Y_START_FT = 6.3;                    // one full slot below the staging band, clears the last staged rock
+var REMOVED_SPLIT_Y_FT = 4.9;                    // margin rock dragged below this y -> removed
+var REMOVED_EDGE_X_FT = REMOVED_X_FT + 0.9;      // outermost edge incl. removed box/labels
+
+// visible canvas width must fit the sheet PLUS both side columns where rocks park
+// and the REMOVED boxes live, so staged rocks are on-screen even on narrow phones;
+// extra 3ft buffer ensures comfortable margins on 320px+ phone screens
+var VIEW_W_FT = 2 * REMOVED_EDGE_X_FT + 3;       // 21.4ft (content 18.4ft + 1.5ft each side)
+
+var state = {
+  rocks: [],
+  flipped: false,
+  ends: 8,               // game length (total ends in the game)
+  end: 1,                // current end being played
+  hammer: 'Red',         // which team has the hammer this end
+  markupMode: false,
+  markupTool: 'pen',
+  markupColor: '#000000',
+  markup: []
+};
+
+var historyStack = [];
+var historyIdx = -1;
+var dragRock = null;
+var dragOff = {x:0, y:0};
+var selectedRock = null;
+var markupDrawing = false;
+var markupStart = null;
+var currentPath = null;
+
+// ---- LAYOUT COMPUTATION ----
+function computeLayout(){
+  var canvas = document.getElementById('sheet');
+  var availW = canvas.clientWidth  || 900;
+  var availH = canvas.clientHeight || 700;
+  if(availW < 100 || availH < 100){ availW = 900; availH = 700; }
+  CW = availW;
+  CH = availH;
+  var useH = availH - SUMMARY_BAND_PX;   // keep a band at the top for the on-canvas summary
+  if(useH < 100) useH = 100;
+  S = Math.min(availW / VIEW_W_FT, useH / VIEW_H_FT);
+  // letterbox offsets: centre the sheet horizontally; pin it to the top (below the summary
+  // band) instead of vertically centring, so no excessive gap appears under the summary
+  OX = Math.floor((availW - VIEW_W_FT * S) / 2);
+  OY = SUMMARY_BAND_PX;
+  CX = Math.floor(VIEW_W_FT * S / 2) + OX;
+  // tee placement depends on orientation so the content fills the canvas:
+  // unflipped -> back line at the top edge, hog at the bottom;
+  // flipped    -> hog at the top edge, back line at the bottom
+  var topGap = BACK_TO_TEE_FT + EDGE_M_FT;
+  TEE_Y = OY + (state.flipped ? (VIEW_H_FT - topGap) : topGap) * S;
+  // back line sits exactly 6ft behind the tee -> tangent to the top of the 12ft circle
+  BACK_Y = TEE_Y - BACK_TO_TEE_FT * S;
+  HOG_Y = TEE_Y + TEE_TO_HOG_FT * S;
+  ROCK_R = Math.round(ROCK_RADIUS_FT * S);
+  if(ROCK_R < 4) ROCK_R = 4;
+}
+
+// map feet y (origin = tee, +y toward hog) to screen px, respecting flip
+function yPx(yf){
+  return state.flipped ? TEE_Y - yf * S : TEE_Y + yf * S;
+}
+// convert feet coords to screen px (flip = true 180 degree rotation about the tee:
+// both x and y are mirrored, so rock placement relative to the sheet is unchanged)
+function toScreen(rock){
+  var x = CX + (state.flipped ? -rock.xf : rock.xf) * S;
+  var y = yPx(rock.yf);
+  return {x:x, y:y};
+}
+// convert screen px to feet coords
+function toFeet(sx, sy){
+  var xf = state.flipped ? -(sx - CX) / S : (sx - CX) / S;
+  var yf = state.flipped ? (TEE_Y - sy) / S : (sy - TEE_Y) / S;
+  return {xf:xf, yf:yf};
+}
+// ---- ROCK SLOTS (margins: yellow left / red right; staging vs removed boxes) ----
+function teamDir(rock){ return rock.color === 'yellow' ? -1 : 1; }
+
+// nearest free y-slot on a team's side, considering only same-status rocks
+function freeSlotY(rock, yStart, gapY){
+  var occupied = [];
+  for(var i=0;i<state.rocks.length;i++){
+    var o = state.rocks[i];
+    if(o !== rock && o.color === rock.color && !!o.removed === !!rock.removed){
+      occupied.push(o.yf);
+    }
+  }
+  var best = yStart, bestD = 1e9;
+  for(var s=0;s<8;s++){
+    var yc = yStart + s * gapY;
+    if(occupied.indexOf(yc) < 0){
+      var d = Math.abs(yc - rock.yf);
+      if(d < bestD){ bestD = d; best = yc; }
+    }
+  }
+  return best;
+}
+
+// park a rock in its own team's side slot (yellow = left, red = right); a removed
+// rock goes into the outboard REMOVED box, otherwise the staging column
+function resetToStaging(rock){
+  if(rock.removed){
+    rock.xf = teamDir(rock) * REMOVED_X_FT;
+    rock.yf = freeSlotY(rock, REMOVED_Y_START_FT, REMOVED_GAP_FT);
+  } else {
+    rock.xf = teamDir(rock) * PARK_X_FT;
+    rock.yf = freeSlotY(rock, PARK_Y_START_FT, PARK_GAP_FT);
+  }
+}
+
+// a rock dropped beyond the sideline belongs back in a margin slot
+function inPark(rock){
+  return Math.abs(rock.xf) > PARK_SNAP_X;
+}
+
+// decide where a dragged rock settles based on its position (feet coords):
+// a rock dragged into the side margin is removed if it lands in the lower band
+// (below the staging ye-band), otherwise it's storage; on the sheet it stays live
+function settleRock(rock){
+  var ax = Math.abs(rock.xf);
+  if(ax > PARK_SNAP_X){
+    rock.removed = (rock.yf > REMOVED_SPLIT_Y_FT);
+    resetToStaging(rock);
+  } else {
+    rock.removed = false;
+  }
+}
+
+function initRocks(){
+  state.rocks = [];
+  for(var i=0;i<16;i++){
+    var isYellow = (i%2===0);
+    state.rocks.push({id:(isYellow?'y':'r')+Math.floor(i/2), color:isYellow?'yellow':'red', xf:0, yf:0, inHouse:false, removed:false});
+  }
+  for(var k=0;k<state.rocks.length;k++) resetToStaging(state.rocks[k]);
+}
+
+// ---- RANDOM PLACEMENT (realistic, non-overlapping) ----
+var RAND_MIN_SEP  = 2.0 * ROCK_RADIUS_FT;   // min centre distance (~0.96ft, one rock): rocks may sit frozen/tangent to a neighbour but never overlap
+// rock centres range from the middle out to just beyond the 12ft ring, so some
+// stones pile near the button, others sit at the ring edge or overhang the house
+var RAND_HOUSE_R  = HOUSE_RADII_FT[0] + ROCK_RADIUS_FT;
+var RAND_HOUSE_P  = 0.75;   // radial exponent: <1 biases inward but keeps edge reachable
+// guard zone is the forward half (beyond the tee line) between the outside of the
+// 12ft ring and the hog line; guards never sit behind the tee or inside the rings
+var RAND_GUARD_RMIN = HOUSE_RADII_FT[0] + ROCK_RADIUS_FT;  // rock edge just outside the 12ft ring
+var RAND_GUARD_RMAX = TEE_TO_HOG_FT - ROCK_RADIUS_FT;       // up to the hog line
+var RAND_TANGENT_TRIES = 8;   // angle attempts per freeze partner before falling back
+var RAND_MAX_TRIES  = 220;
+
+function rockDistance(a, b){
+  var dx = a.xf - b.xf, dy = a.yf - b.yf;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+function validSpot(xf, yf, placed){
+  if((Math.abs(xf) + ROCK_RADIUS_FT) > 7.0) return false;     // not over the sideline
+  for(var i=0;i<placed.length;i++){
+    if(rockDistance(placed[i], {xf:xf, yf:yf}) < RAND_MIN_SEP) return false;
+  }
+  return true;
+}
+// like validSpot but allows exactly-tangent contact with one partner rock (a freeze),
+// while still rejecting overlap with every other placed rock (no poking through a third)
+function validSpotExcept(xf, yf, placed, partner){
+  if((Math.abs(xf) + ROCK_RADIUS_FT) > 7.0) return false;
+  for(var i=0;i<placed.length;i++){
+    if(placed[i] === partner) continue;
+    if(rockDistance(placed[i], {xf:xf, yf:yf}) < RAND_MIN_SEP) return false;
+  }
+  return true;
+}
+// bias rock centres toward the button so house stones pile realistically, but a
+// mild exponent keeps some stones able to sit on the 12ft ring edge or overhang it
+function randomHouseSpot(){
+  var r = RAND_HOUSE_R * Math.pow(Math.random(), RAND_HOUSE_P);
+  var a = Math.random() * Math.PI * 2;
+  return {xf: r * Math.cos(a), yf: r * Math.sin(a)};
+}
+function randomGuardSpot(){
+  // reject-sample random points in the forward guard half-ring until one is on-sheet
+  for(;;){
+    var ang = Math.random() * Math.PI;    // forward half only -> sin(ang)>0 -> y>0 (beyond tee)
+    var r   = RAND_GUARD_RMIN + Math.random() * (RAND_GUARD_RMAX - RAND_GUARD_RMIN);
+    var xf  = r * Math.cos(ang);
+    var yf  = r * Math.sin(ang);
+    if(Math.abs(xf) + ROCK_RADIUS_FT <= 7.0) return {xf:xf, yf:yf};   // inside the sheet
+  }
+}
+// a guard-designated rock may only settle beyond the tee line and outside the 12ft ring
+function zoneOK(xf, yf, isGuard){
+  if(!isGuard) return true;   // house rocks are unrestricted
+  return yf > 0 && rockDistance({xf:0, yf:0}, {xf:xf, yf:yf}) > HOUSE_RADII_FT[0];
+}
+
+// place the situation-consistent number of rocks, alternating colours starting with
+// the non-hammer team (the first thrower), so the board matches whose turn it is.
+// A random number of the delivered rocks (0..delivered, possibly all) are removed
+// from play and parked in the labelled REMOVED box on their team's side.
+function randomizeRocksBySituation(){
+  var n = rocksInPlay();
+  n = Math.max(0, Math.min(16, n));
+  var hammer = document.getElementById('infoHammer').value;
+  var firstColour = (hammer === 'Red') ? 'yellow' : 'red';    // non-hammer throws first
+  var colourQueue = [];
+  for(var c=0;c<16;c++) colourQueue.push((c % 2 === 0) ? firstColour : (firstColour === 'yellow' ? 'red' : 'yellow'));
+  var byColour = {yellow: [], red: []};
+  for(var b=0;b<state.rocks.length;b++) byColour[state.rocks[b].color].push(state.rocks[b]);
+
+  var used = {};
+  var delivered = [];
+  for(var i=0;i<n;i++){
+    var want = colourQueue[i];
+    var rock = null;
+    for(var j=0;j<byColour[want].length;j++){
+      if(!used[byColour[want][j].id]){ rock = byColour[want][j]; break; }
+    }
+    if(!rock) rock = state.rocks[i];
+    used[rock.id] = true;
+    delivered.push(rock);
+  }
+
+  // how many delivered rocks are removed from play (between 0 and all)
+  var removedIdx = [];
+  var pool = [];
+  for(var o=0;o<delivered.length;o++) pool.push(o);
+  var k = Math.floor(Math.random() * (delivered.length + 1));
+  while(removedIdx.length < k && pool.length){
+    var pick = Math.floor(Math.random() * pool.length);
+    removedIdx.push(pool.splice(pick, 1)[0]);
+  }
+  for(var m=0;m<state.rocks.length;m++) state.rocks[m].removed = false;
+  for(var q=0;q<removedIdx.length;q++) delivered[removedIdx[q]].removed = true;
+
+  // place non-removed delivered rocks on the house/guards; removed ones go to their box
+  var freezeP = parseInt(document.getElementById('rzFreezeAmt').value, 10) / 100;
+  var guardP  = parseInt(document.getElementById('rzGuardAmt').value, 10) / 100;
+  var placed = [];
+  for(var p=0;p<delivered.length;p++){
+    var r = delivered[p];
+    if(r.removed){ resetToStaging(r); continue; }
+    var isGuard = (Math.random() < guardP);   // decide this rock's zone: guard or house
+    var spot = null;
+    // attempt a true freeze (edge gap 0, no overlap): sit exactly tangent to a random
+    // placed rock. Usually tries once; loops in case the chosen partner's angles are blocked.
+    // A guard-designated rock may only freeze into the guard zone.
+    if(placed.length > 0 && Math.random() < freezeP){
+      var partner = placed[Math.floor(Math.random() * placed.length)];
+      for(var f=0; f<RAND_TANGENT_TRIES && !spot; f++){
+        var a = Math.random() * Math.PI * 2;
+        var fx = partner.xf + 2 * ROCK_RADIUS_FT * Math.cos(a);
+        var fy = partner.yf + 2 * ROCK_RADIUS_FT * Math.sin(a);
+        if((Math.abs(fx) + ROCK_RADIUS_FT) <= 7.0 && validSpotExcept(fx, fy, placed, partner) && zoneOK(fx, fy, isGuard)) spot = {xf:fx, yf:fy};
+      }
+    }
+    // normal random house/guard placement (guard % determines the split)
+    for(var t=0;t<RAND_MAX_TRIES && !spot;t++){
+      var s = isGuard ? randomGuardSpot() : randomHouseSpot();
+      if(validSpot(s.xf, s.yf, placed) && zoneOK(s.xf, s.yf, isGuard)) spot = {xf:s.xf, yf:s.yf};
+    }
+    // extreme fallback should not happen at n<=16; keep guards out of the rings
+    if(!spot) spot = isGuard ? {xf:0, yf:RAND_GUARD_RMIN} : {xf:0, yf:0};
+    placed.push(spot);
+    r.xf = spot.xf;
+    r.yf = spot.yf;
+    r.inHouse = (rockDistance({xf:0, yf:0}, spot) <= HOUSE_RADII_FT[0]);
+  }
+  // rocks not yet delivered stay in the staging column
+  for(var k2=0;k2<state.rocks.length;k2++){
+    if(!used[state.rocks[k2].id]){ state.rocks[k2].removed = false; resetToStaging(state.rocks[k2]); }
+  }
+  selectedRock = null;
+}
+
+// pick a random <option> from a select and return its value (keeps option strings byte-identical)
+function randomOption(el){
+  var opts = el.options;
+  return opts[Math.floor(Math.random() * opts.length)].value;
+}
+
+// ----- RANDOMIZE the situation dropdowns, per-category -----
+function randomizeScore(){ var el = document.getElementById('infoScore'); el.value = randomOption(el); }
+function randomizeEnd(){
+  var el = document.getElementById('infoCurrentEnd');
+  el.value = randomOption(el);
+  state.end = parseInt(el.value, 10);
+}
+function randomizeNext(){
+  document.getElementById('infoShootColour').value = randomOption(document.getElementById('infoShootColour'));
+  document.getElementById('infoShootPos').value = randomOption(document.getElementById('infoShootPos'));
+  document.getElementById('infoShootNum').value = randomOption(document.getElementById('infoShootNum'));
+}
+function randomizeHammer(){
+  var el = document.getElementById('infoHammer');
+  el.value = randomOption(el);
+  state.hammer = el.value;
+}
+function randomizeTotEnds(){
+  var el = document.getElementById('infoGameLength');
+  el.value = randomOption(el);
+  state.ends = parseInt(el.value, 10);
+  buildEndOptions();
+}
+function randomizeCurl(){ document.getElementById('infoCurl').value = randomOption(document.getElementById('infoCurl')); }
+function randomizeSpeed(){ document.getElementById('infoSpeed').value = randomOption(document.getElementById('infoSpeed')); }
+
+// derive the global delivery number (1..16) for the current Next + hammer setup:
+// non-hammer team throws first (odd indices), hammer team throws last pair of each slot.
+// Each player (Lead/Sec/Third/Skip) throws two: 1st rock then 2nd rock two slots apart.
+function deliveryIndex(){
+  var hammer = document.getElementById('infoHammer').value;
+  var col = document.getElementById('infoShootColour').value;
+  var posIdx = {Lead:0, Second:1, Third:2, Skip:3}[document.getElementById('infoShootPos').value] || 0;
+  var numIdx = (document.getElementById('infoShootNum').value === '2nd rock') ? 1 : 0;
+  var base = (col === hammer) ? (4*posIdx + 2) : (4*posIdx + 1);
+  return base + 2*numIdx;
+}
+
+// number of rocks already delivered = deliveryIndex - 1 (0 before anyone throws)
+function rocksInPlay(){
+  return Math.max(0, deliveryIndex() - 1);
+}
+
+// apply randomization according to the checkboxes, then (optionally) place the
+// situation-consistent number of rocks; runs TotEnds before End so the End range exists
+function applyRandomize(){
+  if(document.getElementById('rzTotEnds').checked) randomizeTotEnds();
+  if(document.getElementById('rzEnd').checked) randomizeEnd();
+  if(document.getElementById('rzScore').checked) randomizeScore();
+  if(document.getElementById('rzNext').checked) randomizeNext();
+  if(document.getElementById('rzHammer').checked) randomizeHammer();
+  if(document.getElementById('rzCurl').checked) randomizeCurl();
+  if(document.getElementById('rzSpeed').checked) randomizeSpeed();
+  if(document.getElementById('rzFreeze').checked) randomizeFreeze();
+  if(document.getElementById('rzGuard').checked) randomizeGuard();
+  if(document.getElementById('rzRocks').checked) randomizeRocksBySituation();
+  pushHistory();
+  render();
+}
+
+// set the Freeze/Guard sliders to a random percentage (0..100) and show it live
+function randomizeFreeze(){
+  var el = document.getElementById('rzFreezeAmt');
+  el.value = Math.round(Math.random() * 100);
+  document.getElementById('rzFreezeAmtVal').textContent = el.value + '%';
+}
+function randomizeGuard(){
+  var el = document.getElementById('rzGuardAmt');
+  el.value = Math.round(Math.random() * 100);
+  document.getElementById('rzGuardAmtVal').textContent = el.value + '%';
+}
+
+function buildScoreOptions(){
+  var el = document.getElementById('infoScore');
+  var h = '<option value="Tied" selected>Tied</option>';
+  for(var i=1;i<=6;i++){ h += '<option value="Red up '+i+'">Red up '+i+'</option>'; }
+  for(var i=1;i<=6;i++){ h += '<option value="Yellow up '+i+'">Yellow up '+i+'</option>'; }
+  el.innerHTML = h;
+  el.value = 'Tied';
+}
+// rebuild Current End options (1..game length) and clamp the current end
+function buildEndOptions(){
+  var el = document.getElementById('infoCurrentEnd');
+  if(state.end > state.ends) state.end = state.ends;
+  if(state.end < 1) state.end = 1;
+  var h = '';
+  for(var i=1;i<=state.ends;i++){ h += '<option value="'+i+'">'+i+'</option>'; }
+  el.innerHTML = h;
+  el.value = String(state.end);
+}
+// the score comes from the Score dropdown selection directly (no board state)
+function applyScoreSelection(){
+  render();
+}
+function snap(){
+  return JSON.stringify({rocks:state.rocks, markup:state.markup, flipped:state.flipped, ends:state.ends, end:state.end, hammer:state.hammer});
+}
+
+function pushHistory(){
+  historyStack = historyStack.slice(0, historyIdx+1);
+  historyStack.push(snap());
+  if(historyStack.length > 50) historyStack.shift();
+  historyIdx = historyStack.length - 1;
+}
+
+function undo(){
+  if(historyIdx <= 0) return;
+  historyIdx--;
+  restore(JSON.parse(historyStack[historyIdx]));
+}
+
+function redo(){
+  if(historyIdx >= historyStack.length-1) return;
+  historyIdx++;
+  restore(JSON.parse(historyStack[historyIdx]));
+}
+
+function restore(s){
+  state.rocks = s.rocks;
+  state.markup = s.markup;
+  state.flipped = s.flipped;
+  state.ends = (s.ends !== undefined) ? s.ends : 8;
+  state.end = (s.end !== undefined) ? s.end : 1;
+  state.hammer = (s.hammer !== undefined) ? s.hammer : 'Red';
+  document.getElementById('infoGameLength').value = String(state.ends);
+  document.getElementById('infoHammer').value = state.hammer;
+  buildEndOptions();
+  render();
+}
+
+function ordinal(n){
+  var s = ['th','st','nd','rd'];
+  var v = n % 100;
+  return n + (s[(v-20)%10] || s[v] || s[0]);
+}
+
+// current setup summary, split into fixed top/bottom rows. Each item carries its own
+// colour. Top row = end + curl + draw speed; bottom row = score + hammer + thrower.
+function summaryItems(){
+  var end = ordinal(state.end) + ' end of ' + state.ends;
+  var hammer = document.getElementById('infoHammer').value;
+  var col = document.getElementById('infoShootColour').value;
+  var pos = document.getElementById('infoShootPos').value;
+  var num = document.getElementById('infoShootNum').value;
+  var curl = document.getElementById('infoCurl').value;
+  var speed = document.getElementById('infoSpeed').value;
+
+  var top = [{text: end, color: '#1a1a2e'}];
+  if(curl !== '') top.push({text: curl + ' curl', color: '#1a1a2e'});
+  if(speed !== '') top.push({text: 'Draw speed ' + speed + 's', color: '#1a1a2e'});
+
+  var bottom = [{text: document.getElementById('infoScore').value, color: scoreColor()}];
+  if(hammer !== 'None') bottom.push({text: (hammer === 'Yellow' ? 'Yellow' : 'Red') + ' has hammer', color: teamColor(hammer)});
+  bottom.push({text: col + ' ' + pos + "'s " + num, color: teamColor(col)});
+
+  return [top, bottom];
+}
+
+function teamColor(name){
+  return name === 'Red' ? '#c00' : '#a08000';
+}
+
+// colour of the Score line: the leading team's colour, grey when tied
+function scoreColor(){
+  var v = document.getElementById('infoScore').value;
+  if(v.indexOf('Red up ') === 0) return teamColor('Red');
+  if(v.indexOf('Yellow up ') === 0) return teamColor('Yellow');
+  return '#666';
+}
+
+// draw the setup summary on the canvas, centred in the reserved band above the rink
+function drawSummary(ctx){
+  var rows = summaryItems();
+  // the summary must never extend beyond the staged rocks (PARK_X_FT), so it stays
+  // within the visible content on any screen; never past the canvas edge either
+  var limit = Math.min(PARK_X_FT * 2 * S, CW) - 8;
+
+  // join a row's items with a bullet separator, send width at a given font
+  function rowWidth(row, font){
+    ctx.font = font + 'px "Calibri", "Segoe UI", sans-serif';
+    var w = 0;
+    for(var i=0;i<row.length;i++){
+      if(i > 0) w += ctx.measureText('  \u2022  ').width;
+      w += ctx.measureText(row[i].text).width;
+    }
+    return w;
+  }
+  // per-row: pick the largest font (from a big start, down to a floor) that fits the width
+  function fitFont(row){
+    var font = 30;
+    while(font > 9 && rowWidth(row, font) > limit) font--;
+    return font;
+  }
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  // both rows share one font size so the summary is uniform.
+  // Fit BOTH rows: the bottom (score) row is often the wider one, so pick the
+  // largest font that satisfies every row, then cap it so the two lines + gap +
+  // bottom gap always fit the band.
+  var gap = 13, bottomGap = 6;
+  var maxFont = Math.floor((SUMMARY_BAND_PX - gap - bottomGap) / 2);
+  var font = maxFont;
+  for(var fr=0; fr<rows.length; fr++) font = Math.min(font, fitFont(rows[fr]));
+  // bottom-anchor: line 2 bottom sits exactly bottomGap above the rink top (OY);
+  // line 1 bottom is gap above line 2 top (prevents overlap at any window size)
+  var y1 = OY - bottomGap - font;
+  var y0 = y1 - gap - font;
+  for(var r=0;r<rows.length;r++){
+    ctx.font = font + 'px "Calibri", "Segoe UI", sans-serif';
+    var total = rowWidth(rows[r], font);
+    var y = (r === 0) ? y0 : y1;
+    var x = CX - total / 2;
+    for(var k=0;k<rows[r].length;k++){
+      ctx.fillStyle = rows[r][k].color;
+      ctx.fillText(rows[r][k].text, x, y);
+      x += ctx.measureText(rows[r][k].text).width;
+      if(k < rows[r].length-1) x += ctx.measureText('  \u2022  ').width;
+    }
+  }
+  ctx.textBaseline = 'alphabetic';
+}
+
+function render(){
+  computeLayout();
+  var c = document.getElementById('sheet');
+  c.width = CW;
+  c.height = CH;
+  var ctx = c.getContext('2d');
+  drawIce(ctx);
+  drawSheet(ctx);
+  drawRemovedBoxes(ctx);
+  drawRocks(ctx);
+  drawSummary(ctx);
+  if(state.markupMode) drawMarkup(ctx);
+  if(markupDrawing && markupStart) drawMarkupPreview(ctx);
+}
+function scaleAll(toScale){
+  var ratio = toScale / S;
+  for(var j=0;j<state.markup.length;j++){
+    var m = state.markup[j];
+    if(m.points){ for(var k=0;k<m.points.length;k++){ m.points[k].x*=ratio; m.points[k].y*=ratio; } }
+    if(m.x1!==undefined){ m.x1*=ratio;m.y1*=ratio;m.x2*=ratio;m.y2*=ratio; }
+    if(m.cx!==undefined){ m.cx*=ratio;m.cy*=ratio;m.ex*=ratio;m.ey*=ratio; }
+  }
+}
+function handleResize(){
+  var oldS = S;
+  computeLayout();
+  scaleAll(oldS);
+  render();
+}
+
+function drawIce(ctx){
+  ctx.fillStyle = '#b0d4f1';
+  ctx.fillRect(0, 0, CW, CH);
+}
+
+function drawSheet(ctx){
+  var sheetW = SHEET_WIDTH_FT * S;
+  var lineW = Math.max(1, Math.round(LINE_W_FT * S));
+  var hogW = Math.max(1.5, Math.round(HOG_W_FT * S));
+  var hogY = yPx(TEE_TO_HOG_FT);          // hog line (flip-aware)
+  var backY = yPx(-BACK_TO_TEE_FT);       // back line (flip-aware)
+  var top = Math.min(hogY, backY);
+  var bottom = Math.max(hogY, backY);
+
+  // house first so line markings draw on top of the ring fills
+  drawHouse(ctx);
+
+  // sheet boundary (sidelines) between hog and back lines
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = lineW;
+  ctx.strokeRect(CX - sheetW/2, top, sheetW, bottom - top);
+
+  // hog line (red, standard width)
+  ctx.strokeStyle = '#cc0000';
+  ctx.lineWidth = hogW;
+  ctx.beginPath();
+  ctx.moveTo(CX - sheetW/2, hogY);
+  ctx.lineTo(CX + sheetW/2, hogY);
+  ctx.stroke();
+
+  // tee line, back line
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = lineW;
+  ctx.beginPath();
+  ctx.moveTo(CX - sheetW/2, TEE_Y);
+  ctx.lineTo(CX + sheetW/2, TEE_Y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(CX - sheetW/2, backY);
+  ctx.lineTo(CX + sheetW/2, backY);
+  ctx.stroke();
+
+  // centre line from hog line, through the centre of the house, to the back line
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = lineW;
+  ctx.beginPath();
+  ctx.moveTo(CX, hogY);
+  ctx.lineTo(CX, backY);
+  ctx.stroke();
+}
+
+function drawHouse(ctx){
+  var colors = ['#0055a5', '#ffffff', '#cc0000', '#ffffff'];
+  var radii = [];
+  for(var i=0;i<4;i++) radii.push(HOUSE_RADII_FT[i] * S);
+  for(var i=0;i<4;i++){
+    ctx.fillStyle = colors[i];
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = Math.max(0.5, Math.round(LINE_W_FT*S));
+    ctx.beginPath();
+    ctx.arc(CX, TEE_Y, radii[i], 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+function drawStagingArea(ctx){
+  var sepY = yPx(-(BACK_TO_TEE_FT + 1));   // dashed separator 1ft behind the back line (flip-aware)
+  ctx.strokeStyle = '#999';
+  ctx.lineWidth = Math.max(0.5, Math.round(LINE_W_FT * S));
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(CX - SHEET_WIDTH_FT*S/2, sepY);
+  ctx.lineTo(CX + SHEET_WIDTH_FT*S/2, sepY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawRemovedBoxes(ctx){
+  var lw = Math.max(1, Math.round(0.07 * S));
+  var fs = Math.max(9, Math.round(0.5 * S));
+  ctx.font = 'bold ' + fs + 'px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // flipped-aware rectangle in screen px from a feet bounds box
+  function boxRect(xf1, xf2, yf1, yf2){
+    var pts = [toScreen({xf:xf1,yf:yf1}), toScreen({xf:xf2,yf:yf1}), toScreen({xf:xf1,yf:yf2}), toScreen({xf:xf2,yf:yf2})];
+    var x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+    for(var i=0;i<4;i++){ x1=Math.min(x1,pts[i].x); x2=Math.max(x2,pts[i].x); y1=Math.min(y1,pts[i].y); y2=Math.max(y2,pts[i].y); }
+    return {x:x1, y:y1, w:x2-x1, h:y2-y1};
+  }
+  // removed band: same x column as staging, but only the lower band below the staging rocks
+  var inEdge = REMOVED_X_FT - 0.6;         // inward box edge (feet)
+  var outEdge = REMOVED_X_FT + 0.6;        // outward box edge (feet)
+  var yT = REMOVED_Y_START_FT - 0.6;                 // top: pad above the first removed rock
+  var yB = REMOVED_Y_START_FT + 7 * REMOVED_GAP_FT + 0.6; // bottom: pad past the 8th removed rock
+
+  var right = boxRect(inEdge, outEdge, yT, yB);   // red side
+  var left  = boxRect(-outEdge, -inEdge, yT, yB); // yellow side
+
+  function drawBox(rect, label, col){
+    var x = rect.x, y = rect.y, w = rect.w, h = rect.h;
+    ctx.fillStyle = 'rgba(250,250,250,0.5)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = lw;
+    ctx.strokeRect(x, y, w, h);
+    // vertical label, centered within the box, reading top-to-bottom
+    ctx.save();
+    ctx.translate(x + w/2, y + h/2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = col;
+    ctx.font = 'bold ' + fs + 'px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+  drawBox(right, 'REMOVED', '#8b0000');
+  drawBox(left, 'REMOVED', '#8a6d00');
+}
+
+function drawRocks(ctx){
+  for(var i=0;i<state.rocks.length;i++){
+    var p = toScreen(state.rocks[i]);
+    drawRock(ctx, p.x, p.y, state.rocks[i]);
+  }
+}
+
+function drawRock(ctx, sx, sy, rock){
+  var rad = ROCK_R;
+  ctx.beginPath();
+  ctx.arc(sx, sy, rad, 0, Math.PI*2);
+  ctx.fillStyle = rock.color==='yellow' ? '#ffd700' : '#cc0000';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.3)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  if(rock === selectedRock){
+    ctx.beginPath();
+    ctx.arc(sx, sy, rad+3, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(255,255,0,.7)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+function drawMarkup(ctx){
+  var lw = Math.max(1.5, Math.round(0.125*S));
+  for(var i=0;i<state.markup.length;i++){
+    var m = state.markup[i];
+    ctx.strokeStyle = m.color;
+    ctx.fillStyle = m.color;
+    ctx.lineWidth = lw;
+    if(m.type==='pen' && m.points && m.points.length>1){
+      ctx.beginPath();
+      ctx.moveTo(m.points[0].x, m.points[0].y);
+      for(var j=1;j<m.points.length;j++) ctx.lineTo(m.points[j].x, m.points[j].y);
+      ctx.stroke();
+    } else if(m.type==='line'){
+      ctx.beginPath(); ctx.moveTo(m.x1,m.y1); ctx.lineTo(m.x2,m.y2); ctx.stroke();
+    } else if(m.type==='arrow'){
+      drawArrow(ctx, m.x1, m.y1, m.x2, m.y2, m.color);
+    } else if(m.type==='circle'){
+      var dx = m.cx-m.ex, dy = m.cy-m.ey;
+      var r = Math.sqrt(dx*dx+dy*dy);
+      ctx.beginPath(); ctx.arc(m.cx, m.cy, r, 0, Math.PI*2); ctx.stroke();
+    }
+  }
+}
+
+function drawArrow(ctx, x1, y1, x2, y2, color){
+  var dx = x2-x1, dy = y2-y1;
+  var len = Math.sqrt(dx*dx+dy*dy);
+  if(len<1) return;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  var angle = Math.atan2(dy, dx);
+  var hs = Math.max(8, Math.round(0.6*S));
+  var ha = Math.PI/6;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - hs*Math.cos(angle-ha), y2 - hs*Math.sin(angle-ha));
+  ctx.lineTo(x2 - hs*Math.cos(angle+ha), y2 - hs*Math.sin(angle+ha));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function drawMarkupPreview(ctx){
+  ctx.globalAlpha = 0.6;
+  ctx.strokeStyle = state.markupColor;
+  ctx.fillStyle = state.markupColor;
+  ctx.lineWidth = Math.max(1.5, Math.round(0.125*S));
+  if(state.markupTool==='pen' && currentPath && currentPath.length>1){
+    ctx.beginPath();
+    ctx.moveTo(currentPath[0].x, currentPath[0].y);
+    for(var j=1;j<currentPath.length;j++) ctx.lineTo(currentPath[j].x, currentPath[j].y);
+    ctx.stroke();
+  } else if(state.markupTool==='line'){
+    ctx.beginPath(); ctx.moveTo(markupStart.x,markupStart.y); ctx.lineTo(markupDrawing.x,markupDrawing.y); ctx.stroke();
+  } else if(state.markupTool==='arrow'){
+    drawArrow(ctx, markupStart.x, markupStart.y, markupDrawing.x, markupDrawing.y, state.markupColor);
+  } else if(state.markupTool==='circle'){
+    var dx = markupStart.x-markupDrawing.x, dy = markupStart.y-markupDrawing.y;
+    ctx.beginPath(); ctx.arc(markupStart.x, markupStart.y, Math.sqrt(dx*dx+dy*dy), 0, Math.PI*2); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+var HIT_R_PX = 24;   // enlarged rock selection/tap radius (finger-friendly); won't drop below this
+function hitRock(mx, my){
+  var hitR = Math.max(ROCK_R, HIT_R_PX);
+  var hitRR = hitR * hitR;
+  var best = null, bestD = hitRR + 1;
+  for(var i=state.rocks.length-1;i>=0;i--){
+    var r = state.rocks[i];
+    var p = toScreen(r);
+    var dx = mx-p.x, dy = my-p.y;
+    var d2 = dx*dx + dy*dy;
+    if(d2 <= hitRR && d2 < bestD){ best = r; bestD = d2; }   // nearest rock wins
+  }
+  return best;
+}
+
+function inPark(rock){
+  return Math.abs(rock.xf) > PARK_SNAP_X;
+}
+
+var canvas = document.getElementById('sheet');
+
+canvas.addEventListener('mousedown', function(e){
+  var rect = canvas.getBoundingClientRect();
+  var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  if(state.markupMode){
+    markupDrawing = {x:mx, y:my};
+    markupStart = {x:mx, y:my};
+    if(state.markupTool==='pen') currentPath = [{x:mx, y:my}];
+    return;
+  }
+  var rock = hitRock(mx, my);
+  if(rock){
+    dragRock = rock;
+    var mp = toFeet(mx, my);
+    dragOff.x = mp.xf - rock.xf;
+    dragOff.y = mp.yf - rock.yf;
+    selectedRock = rock;
+  } else {
+    selectedRock = null;
+  }
+  render();
+});
+
+canvas.addEventListener('mousemove', function(e){
+  var rect = canvas.getBoundingClientRect();
+  var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  if(markupDrawing){
+    markupDrawing.x = mx;
+    markupDrawing.y = my;
+    if(state.markupTool==='pen' && currentPath) currentPath.push({x:mx, y:my});
+    render();
+    return;
+  }
+  if(dragRock){
+    var mp = toFeet(mx, my);
+    dragRock.xf = mp.xf - dragOff.x;
+    dragRock.yf = mp.yf - dragOff.y;
+    render();
+  }
+});
+
+canvas.addEventListener('mouseup', function(e){
+  if(markupDrawing){
+    if(state.markupTool==='pen' && currentPath && currentPath.length>1){
+      state.markup.push({type:'pen', color:state.markupColor, points:currentPath.slice()});
+    } else if(state.markupTool==='line'){
+      state.markup.push({type:'line', color:state.markupColor, x1:markupStart.x, y1:markupStart.y, x2:markupDrawing.x, y2:markupDrawing.y});
+    } else if(state.markupTool==='arrow'){
+      state.markup.push({type:'arrow', color:state.markupColor, x1:markupStart.x, y1:markupStart.y, x2:markupDrawing.x, y2:markupDrawing.y});
+    } else if(state.markupTool==='circle'){
+      state.markup.push({type:'circle', color:state.markupColor, cx:markupStart.x, cy:markupStart.y, ex:markupDrawing.x, ey:markupDrawing.y});
+    }
+    markupDrawing = false;
+    markupStart = null;
+    currentPath = null;
+    pushHistory();
+    render();
+    return;
+  }
+  if(dragRock){
+    settleRock(dragRock);
+    dragRock = null;
+    pushHistory();
+    render();
+  }
+});
+
+canvas.addEventListener('mouseleave', function(){
+  if(dragRock){
+    settleRock(dragRock);
+    dragRock = null;
+    pushHistory();
+    render();
+  }
+  if(markupDrawing){
+    markupDrawing = false;
+    markupStart = null;
+    currentPath = null;
+    render();
+  }
+});
+
+// ---- TOUCH SUPPORT (mirrors the mouse handlers above) ----
+canvas.addEventListener('touchstart', function(e){
+  e.preventDefault();
+  var rect = canvas.getBoundingClientRect();
+  var mx = e.touches[0].clientX - rect.left, my = e.touches[0].clientY - rect.top;
+  if(state.markupMode){
+    markupDrawing = {x:mx, y:my};
+    markupStart = {x:mx, y:my};
+    if(state.markupTool==='pen') currentPath = [{x:mx, y:my}];
+    return;
+  }
+  var rock = hitRock(mx, my);
+  if(rock){
+    dragRock = rock;
+    var mp = toFeet(mx, my);
+    dragOff.x = mp.xf - rock.xf;
+    dragOff.y = mp.yf - rock.yf;
+    selectedRock = rock;
+  } else {
+    selectedRock = null;
+  }
+  render();
+}, {passive:false});
+
+canvas.addEventListener('touchmove', function(e){
+  e.preventDefault();
+  var rect = canvas.getBoundingClientRect();
+  var mx = e.touches[0].clientX - rect.left, my = e.touches[0].clientY - rect.top;
+  if(markupDrawing){
+    markupDrawing.x = mx;
+    markupDrawing.y = my;
+    if(state.markupTool==='pen' && currentPath) currentPath.push({x:mx, y:my});
+    render();
+    return;
+  }
+  if(dragRock){
+    var mp = toFeet(mx, my);
+    dragRock.xf = mp.xf - dragOff.x;
+    dragRock.yf = mp.yf - dragOff.y;
+    render();
+  }
+}, {passive:false});
+
+canvas.addEventListener('touchend', function(e){
+  e.preventDefault();
+  var rect = canvas.getBoundingClientRect();
+  var t = e.changedTouches[0];
+  var mx = t ? (t.clientX - rect.left) : 0, my = t ? (t.clientY - rect.top) : 0;
+  if(markupDrawing){
+    if(state.markupTool==='pen' && currentPath && currentPath.length>1){
+      state.markup.push({type:'pen', color:state.markupColor, points:currentPath.slice()});
+    } else if(state.markupTool==='line'){
+      state.markup.push({type:'line', color:state.markupColor, x1:markupStart.x, y1:markupStart.y, x2:markupDrawing.x, y2:markupDrawing.y});
+    } else if(state.markupTool==='arrow'){
+      state.markup.push({type:'arrow', color:state.markupColor, x1:markupStart.x, y1:markupStart.y, x2:markupDrawing.x, y2:markupDrawing.y});
+    } else if(state.markupTool==='circle'){
+      state.markup.push({type:'circle', color:state.markupColor, cx:markupStart.x, cy:markupStart.y, ex:markupDrawing.x, ey:markupDrawing.y});
+    }
+    markupDrawing = false;
+    markupStart = null;
+    currentPath = null;
+    pushHistory();
+    render();
+    return;
+  }
+  if(dragRock){
+    settleRock(dragRock);
+    dragRock = null;
+    pushHistory();
+    render();
+  }
+}, {passive:false});
+
+canvas.addEventListener('touchcancel', function(e){
+  if(markupDrawing){
+    markupDrawing = false;
+    markupStart = null;
+    currentPath = null;
+    render();
+  }
+  if(dragRock){
+    settleRock(dragRock);
+    dragRock = null;
+    pushHistory();
+    render();
+  }
+}, {passive:false});
+
+document.addEventListener('keydown', function(e){
+  if(e.target.tagName==='INPUT' || e.target.tagName==='SELECT') return;
+  if((e.ctrlKey||e.metaKey) && e.key==='z'){
+    e.preventDefault();
+    if(e.shiftKey) redo(); else undo();
+    return;
+  }
+  if((e.ctrlKey||e.metaKey) && e.key==='y'){
+    e.preventDefault();
+    redo();
+    return;
+  }
+  if(e.key==='Delete' || e.key==='Backspace'){
+    if(selectedRock){
+      resetToStaging(selectedRock);
+      selectedRock = null;
+      pushHistory();
+      render();
+    }
+  }
+  if(e.key==='Escape'){
+    selectedRock = null;
+    if(state.markupMode){
+      state.markupMode = false;
+      document.getElementById('btnMarkup').classList.remove('active');
+      document.getElementById('markupBar').classList.remove('visible');
+    }
+    render();
+  }
+});
+
+document.getElementById('btnUndo').addEventListener('click', undo);
+document.getElementById('btnRedo').addEventListener('click', redo);
+
+document.getElementById('btnClear').addEventListener('click', function(){
+  for(var i=0;i<state.rocks.length;i++){
+    resetToStaging(state.rocks[i]);
+  }
+  selectedRock = null;
+  pushHistory();
+  render();
+});
+
+document.getElementById('btnRandomize').addEventListener('click', function(){ applyRandomize(); });
+
+document.getElementById('btnFlip').addEventListener('click', function(){
+  state.flipped = !state.flipped;
+  pushHistory();
+  render();
+});
+
+document.getElementById('btnMarkup').addEventListener('click', function(){
+  state.markupMode = !state.markupMode;
+  this.classList.toggle('active');
+  document.getElementById('markupBar').classList.toggle('visible');
+  if(!state.markupMode){
+    markupDrawing = false;
+    markupStart = null;
+    currentPath = null;
+  }
+  render();
+});
+
+document.getElementById('btnSettings').addEventListener('click', function(){ toggleSideCol(); });
+document.getElementById('btnSideToggle').addEventListener('click', function(){ toggleSideCol(); });
+document.getElementById('btnSideClose').addEventListener('click', function(){ closeSideCol(); });
+document.getElementById('sideBackdrop').addEventListener('click', function(){ closeSideCol(); });
+
+function toggleSideCol(){
+  var sc = document.getElementById('sideCol');
+  sc.classList.toggle('visible');
+  document.body.classList.toggle('menu-open', sc.classList.contains('visible'));
+}
+
+function closeSideCol(){
+  var sc = document.getElementById('sideCol');
+  sc.classList.remove('visible');
+  document.body.classList.remove('menu-open');
+}
+
+// tapping the rink (canvas) dismisses the open side menu on mobile
+document.getElementById('sheet').addEventListener('click', function(){
+  closeSideCol();
+});
+
+document.getElementById('btnSave').addEventListener('click', function(){
+  var c = document.getElementById('sheet');
+  // capture the summary strip (top) + the rink/sheet and both REMOVED side boxes,
+  // cropping the empty letterbox margins
+  var edge = Math.round(REMOVED_EDGE_X_FT * S);
+  var w = edge * 2;
+  var h = Math.round(OY + VIEW_H_FT * S);
+  var x = Math.round(CX - edge);
+  var tmp = document.createElement('canvas');
+  tmp.width = w;
+  tmp.height = h;
+  var tctx = tmp.getContext('2d');
+  tctx.drawImage(c, x, 0, w, h, 0, 0, w, h);
+  var link = document.createElement('a');
+  link.download = 'curling-board.png';
+  link.href = tmp.toDataURL('image/png');
+  link.click();
+});
+
+document.getElementById('btnFullscreen').addEventListener('click', function(){
+  var container = document.querySelector('.app');
+  if(document.fullscreenElement){
+    document.exitFullscreen();
+  } else {
+    if(container.requestFullscreen) container.requestFullscreen();
+    else if(container.webkitRequestFullscreen) container.webkitRequestFullscreen();
+  }
+});
+
+window.addEventListener('resize', function(){
+  handleResize();
+});
+document.addEventListener('fullscreenchange', function(){
+  handleResize();
+});
+document.addEventListener('webkitfullscreenchange', function(){
+  handleResize();
+});
+
+document.querySelectorAll('.markup-tool').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('.markup-tool').forEach(function(b){ b.classList.remove('active') });
+    this.classList.add('active');
+    state.markupTool = this.getAttribute('data-tool');
+  });
+});
+
+document.getElementById('markupColor').addEventListener('input', function(){
+  state.markupColor = this.value;
+});
+
+// Freeze/Guard sliders: update their live % labels on input
+document.getElementById('rzFreezeAmt').addEventListener('input', function(){
+  document.getElementById('rzFreezeAmtVal').textContent = this.value + '%';
+});
+document.getElementById('rzGuardAmt').addEventListener('input', function(){
+  document.getElementById('rzGuardAmtVal').textContent = this.value + '%';
+});
+
+document.getElementById('btnMarkupUndo').addEventListener('click', function(){
+  if(state.markup.length > 0){
+    state.markup.pop();
+    pushHistory();
+    render();
+  }
+});
+
+document.getElementById('btnMarkupClear').addEventListener('click', function(){
+  state.markup = [];
+  pushHistory();
+  render();
+});
+
+buildScoreOptions();
+document.getElementById('infoGameLength').value = String(state.ends);
+document.getElementById('infoHammer').value = state.hammer;
+document.getElementById('infoCurl').value = '4ft';
+document.getElementById('infoSpeed').value = '14.5';
+buildEndOptions();
+// device-aware default: open Settings on desktop, collapsed on small/phone screens
+initRocks();
+pushHistory();
+render();
+document.getElementById('infoScore').addEventListener('change', applyScoreSelection);
+document.getElementById('infoCurrentEnd').addEventListener('change', function(){
+  state.end = parseInt(this.value, 10);
+  applyScoreSelection();
+});
+document.getElementById('infoGameLength').addEventListener('change', function(){
+  state.ends = parseInt(this.value, 10);
+  buildEndOptions();
+  applyScoreSelection();
+});
+document.getElementById('infoHammer').addEventListener('change', function(){
+  state.hammer = this.value;
+  applyScoreSelection();
+});
+document.getElementById('infoShootColour').addEventListener('change', function(){ render(); });
+document.getElementById('infoShootPos').addEventListener('change', function(){ render(); });
+document.getElementById('infoShootNum').addEventListener('change', function(){ render(); });
+document.getElementById('infoCurl').addEventListener('change', function(){ render(); });
+document.getElementById('infoSpeed').addEventListener('change', function(){ render(); });
+// re-layout once the container has real dimensions (initial render runs during parse)
+window.addEventListener('load', function(){ handleResize(); requestAnimationFrame(handleResize); });
+if(document.readyState!=='complete') { requestAnimationFrame(handleResize); }
+// register the PWA service worker for offline caching; only over https
+if('serviceWorker' in navigator && location.protocol.indexOf('https') === 0){
+  navigator.serviceWorker.register('sw.js');
+}
+})();
+</script>
+</body>
+</html>
